@@ -1,0 +1,26 @@
+{
+  "type": "module",
+  "name": "migrate-mongo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "format": "prettier --write \"src/**/*.js\" \"test/**/*.js\"",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.js\" --fix",
+    "test": "jest",
+    "start": "node -r esm src/index.js",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "release": "standard-version"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cli-progress": "^3.10.0",
+    "dotenv": "^8.2.0",
+    "esm": "^3.2.25",
+    "mongodb": "^4.5.0",
+    "simple-node-logger": "^21.8.12"
+  }
+}
