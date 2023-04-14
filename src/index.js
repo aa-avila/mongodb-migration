@@ -92,7 +92,13 @@ async function main() {
       );
 
       for await (const { key, name } of collection.indexes) {
-        await cloneIndex(clientTarget, collection.name, key, name);
+        try {
+          await cloneIndex(clientTarget, collection.name, key, name);
+        } catch (error) {
+          logger.error(
+            `Error cloning index in collection ${collection.name}. Error: ${error}`
+          );
+        }
       }
       collecionsReady += 1;
       bar.update(collecionsReady);
