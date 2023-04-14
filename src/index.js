@@ -3,23 +3,21 @@
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import cliProgress from 'cli-progress';
-import logger from './utils/logger';
+import logger from './utils/logger.js';
 
 dotenv.config();
 
 const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
 
-const targetURL = process.env.MONGO_TARGET_URL;
 const sourceURL = process.env.MONGO_SOURCE_URL;
+const targetURL = process.env.MONGO_TARGET_URL;
+const targetDB = 'monolith';
+const dbsSourceToClone = ['accounts', 'providers', 'payments'];
 
 let collecionsReady = 0;
 
-async function deleteDb(client, database) {
-  await client.db(database).dropDatabase({ writeConcern: { w: 'majority' } });
-}
-
-async function cloneIndex(target, db, collection, indexKey, indexName) {
-  await target.db(db).collection(collection).createIndex(indexKey, {
+async function cloneIndex(target, collection, indexKey, indexName) {
+  await target.db(targetDB).collection(collection).createIndex(indexKey, {
     background: true,
     name: indexName
   });
@@ -27,7 +25,7 @@ async function cloneIndex(target, db, collection, indexKey, indexName) {
 
 async function cloneCollection(source, target, db, collection) {
   const sourceCollection = await source.db(db).collection(collection);
-  const targetCollection = await target.db(db).collection(collection);
+  const targetCollection = await target.db(targetDB).collection(collection);
   const allData = await sourceCollection.find().toArray();
   if (allData.length) await targetCollection.insertMany(allData);
 }
@@ -40,22 +38,25 @@ async function main() {
     await clientTarget.connect();
     await clientSource.connect();
 
-    const { databases } = await clientSource.db().admin().listDatabases();
+    const { databases: databasesSource } = await clientSource
+      .db()
+      .admin()
+      .listDatabases();
 
     let collections = [];
 
-    for await (const { name: dbName } of databases) {
-      if (['accounts', 'providers', 'payments'].includes(dbName)) {
+    for await (const { name: dbName } of databasesSource) {
+      if (dbsSourceToClone.includes(dbName)) {
         logger.info(`Fetch collections...`);
         let mapCollections = await clientSource
           .db(dbName)
           .listCollections()
           .toArray();
 
-        mapCollections = mapCollections.map((colletion) => {
-          logger.info(`Found colletion ${colletion.name}`);
+        mapCollections = mapCollections.map((collection) => {
+          logger.info(`Found colletion ${collection.name}`);
           return {
-            ...colletion,
+            ...collection,
             dbName
           };
         });
@@ -76,21 +77,13 @@ async function main() {
         }
 
         collections = [...collections, ...mapCollections];
-
-        logger.info(`Deleting database: ${dbName}`);
-        await deleteDb(clientTarget, dbName);
       }
     }
+
     logger.info(`Cloning  ${collections.length} collections`);
 
     bar.start(collections.length, 0);
     for await (const collection of collections) {
-      // ignore collecions
-      if (['applications', 'joborders', 'jobs'].includes(collection.name)) {
-        collecionsReady += 1;
-        continue;
-      }
-
       await cloneCollection(
         clientSource,
         clientTarget,
@@ -99,13 +92,7 @@ async function main() {
       );
 
       for await (const { key, name } of collection.indexes) {
-        await cloneIndex(
-          clientTarget,
-          collection.dbName,
-          collection.name,
-          key,
-          name
-        );
+        await cloneIndex(clientTarget, collection.name, key, name);
       }
       collecionsReady += 1;
       bar.update(collecionsReady);
